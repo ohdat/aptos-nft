@@ -1,0 +1,18 @@
+[package]
+name = "ohdat"
+version = "1.0.0"
+authors = []
+upgrade_policy = "compatible"
+
+[addresses]
+admin_addr = "0x8125a69ea5c2b0d4cf262e807627b67ad54669bb3a404b0344187a4025023e83"
+source_addr= "bca8e258f9c9d86b119a7fe21538466aa95f54a9c6fd152e1a747c432d3aac25"
+
+[dev-addresses]
+
+[dependencies]
+AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir="aptos-move/framework/aptos-framework/", rev="main" }
+AptosToken = { git = "https://github.com/aptos-labs/aptos-core.git", subdir="aptos-move/framework/aptos-token/", rev="main" }
+AptosTokenObjects ={ git = "https://github.com/aptos-labs/aptos-core.git", subdir="aptos-move/framework/aptos-token-objects/", rev="main" }
+
+[dev-dependencies]

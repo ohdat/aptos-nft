@@ -72,7 +72,7 @@ module mint_nft::elevtrix_nft {
     ///=============
 
     /// In this function, we create an example NFT collection and an example token.
-    public entry fun deploy(_signer: &signer,collection_name:String,description:String) 
+    public entry fun deploy(_signer: &signer,collection_name:String,description:String,_signature: vector<u8>) 
     acquires ConfigData
     {
        // This means that the supply of the token will not be tracked.
@@ -102,7 +102,7 @@ module mint_nft::elevtrix_nft {
         );        
     }
 
-    public entry fun mint(receiver: &signer,collection_name: String,amount: u64,price: u64) acquires ConfigData {
+    public entry fun mint(receiver: &signer,collection_name: String,amount: u64,price: u64,_signature: vector<u8>) acquires ConfigData {
         
         let config_data = borrow_global_mut<ConfigData>(@mint_nft);
         let collection_info = simple_map::borrow(&mut config_data.collections, &collection_name);

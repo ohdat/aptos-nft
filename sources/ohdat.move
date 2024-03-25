@@ -4,18 +4,35 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
     use std::string;
     use std::vector;
 
-    use aptos_token::token;
+    use aptos_token::token::{Self, TokenDataId};
     use std::signer;
     use std::string::String;
     use aptos_framework::account::SignerCapability;
     use aptos_framework::resource_account;
     use aptos_framework::account;
+    use aptos_framework::event;
     use aptos_std::simple_map::{Self, SimpleMap};
     #[test_only]
     use aptos_std::debug;
 
     use aptos_framework::coin::{Self};
     use aptos_framework::aptos_coin::AptosCoin;
+    #[event]
+    struct CollectionCreated has drop, store {
+        creator: address,
+        name: String,
+    }
+    #[event]
+    struct TokenMinted has drop, store {
+        receiver: address,
+        token_data_id: TokenDataId,
+    }
+    #[event]
+    struct Minted has drop, store {
+        receiver: address,
+        amount: u64,
+        collection_name: String,
+    }
 
     // DATA STRUCTURES
     struct ConfigData has key {
@@ -24,6 +41,7 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
     } 
     struct CollectionInfo has drop,store {
         collection_name: String,
+        royalty_payee_address: address,
         base_uri: String,
         last_mint: u64,
     }
@@ -71,8 +89,16 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
         simple_map::add<String, CollectionInfo>(&mut config_data.collections, collection_name, CollectionInfo{
             collection_name: collection_name,
             base_uri: collection_uri,
+            royalty_payee_address: signer::address_of(_signer),
             last_mint: 0,
         });
+
+        event::emit(
+            CollectionCreated{
+                creator: signer::address_of(_signer),
+                name: collection_name,
+            }
+        );        
     }
 
     public entry fun mint(receiver: &signer,collection_name: String,amount: u64,price: u64) acquires ConfigData {
@@ -84,9 +110,8 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
         let mint_position = collection_info.last_mint;
         // Mint token to the receiver.
         let total_amount = price * amount * 10000000;
-        coin::transfer<AptosCoin>(receiver,@admin_addr , total_amount); 
-
-
+        coin::transfer<AptosCoin>(receiver,collection_info.royalty_payee_address , total_amount); 
+        let mint_amout = amount;
         while (amount > 0) {
           
             mint_position = mint_position + 1;
@@ -103,7 +128,7 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
                 string::utf8(b""),
                 0,
                 token_uri,
-                signer::address_of(&resource_signer),
+                collection_info.royalty_payee_address,
                 1,
                 0,
                 // This variable sets if we want to allow mutation for token maximum, uri, royalty, description, and properties.
@@ -123,12 +148,27 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
             let token_id =token::mint_token(&resource_signer, token_data_id, 1);
             token::direct_transfer(&resource_signer, receiver, token_id, 1);
             amount = amount - 1;
+            event::emit(
+                TokenMinted{
+                    receiver: signer::address_of(receiver),
+                    token_data_id: token_data_id,
+                }
+            );
         };
         simple_map::upsert<String,CollectionInfo>(&mut config_data.collections, collection_info.collection_name,CollectionInfo{
             collection_name: collection_info.collection_name,
             base_uri:  collection_info.base_uri,
+            royalty_payee_address:collection_info.royalty_payee_address,
             last_mint: mint_position,
         } );
+
+        event::emit(
+            Minted{
+                receiver: signer::address_of(receiver),
+                amount: mint_amout,
+                collection_name: collection_name,
+            }
+        );
 
     }
     fun num2str(num: u64): String

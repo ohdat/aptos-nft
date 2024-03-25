@@ -6,8 +6,7 @@ upgrade_policy = "compatible"
 
 [addresses]
 admin_addr = "0x8125a69ea5c2b0d4cf262e807627b67ad54669bb3a404b0344187a4025023e83"
-source_addr= "bca8e258f9c9d86b119a7fe21538466aa95f54a9c6fd152e1a747c432d3aac25"
-
+source_addr= "1e00955e3325a189b20b3abe92f2694cb95e4e7b3addd2e6cc371356148145d7"
 [dev-addresses]
 
 [dependencies]

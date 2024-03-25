@@ -1,5 +1,5 @@
 
-module mint_nft::create_nft_with_resource_and_admin_accounts {
+module mint_nft::elevtrix_nft {
     // use std::error;
     use std::string;
     use std::vector;
@@ -72,7 +72,7 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
     ///=============
 
     /// In this function, we create an example NFT collection and an example token.
-    public entry fun deploy(_signer: &signer,collection_name:String,description:String,collection_uri:String) 
+    public entry fun deploy(_signer: &signer,collection_name:String,description:String) 
     acquires ConfigData
     {
        // This means that the supply of the token will not be tracked.
@@ -83,7 +83,8 @@ module mint_nft::create_nft_with_resource_and_admin_accounts {
 
         let config_data = borrow_global_mut<ConfigData>(@mint_nft);
         let resource_signer = account::create_signer_with_capability(&config_data.signer_cap);
-
+        //todo add base uri to the collection
+        let collection_uri = collection_name;
         // Create the nft collection.
         token::create_collection(&resource_signer, collection_name, description, collection_uri, maximum_supply, mutate_setting);
         simple_map::add<String, CollectionInfo>(&mut config_data.collections, collection_name, CollectionInfo{

@@ -52,6 +52,12 @@ module mint_nft::elevtrix_nft {
         last_mint: u64,
     }
 
+    //
+    struct MintData has drop, store {
+        whileMinted: SimpleMap<String, u64>,
+        minted : SimpleMap<String, u64>,
+    }
+
     // This struct stores the challenge message that proves that the resource signer wants to mint this token
     // to the receiver. This struct will need to be signed by the resource signer to pass the verification.
     struct DeployChallenge has drop {
@@ -207,9 +213,6 @@ module mint_nft::elevtrix_nft {
             royalty_payee_address:collection_info.royalty_payee_address,
             last_mint: mint_position,
         } );
-
-      
-
     }
     fun num2str(num: u64): String
         {

@@ -125,7 +125,7 @@ module mint_nft::elevtrix_nft {
     {
         let config_data = borrow_global_mut<ConfigData>(@mint_nft);
         // Verify the signature of the deployer
-        // verify_of_deploy(signer::address_of(_signer), collection_name, _signature, config_data.public_key);
+        verify_of_deploy(signer::address_of(_signer), collection_name, _signature, config_data.public_key);
        // This means that the supply of the token will not be tracked.
         let maximum_supply = 0;
         // This variable sets if we want to allow mutation for collection description, uri, and maximum.

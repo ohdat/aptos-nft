@@ -17,3 +17,6 @@ Cargo.lock
 .aptos
 # build
 build
+
+#node modules
+node_modules

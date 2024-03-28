@@ -44,6 +44,7 @@ module mint_nft::elevtrix_nft {
         collections:SimpleMap<String,CollectionInfo>,
         public_key: ed25519::ValidatedPublicKey,
         base_uri: String,
+        nonce : vector<u64>,
     } 
     struct CollectionInfo has drop,store {
         collection_name: String,
@@ -53,7 +54,7 @@ module mint_nft::elevtrix_nft {
     }
 
     //
-    struct MintData has drop, store {
+    struct MintData has key {
         whileMinted: SimpleMap<String, u64>,
         minted : SimpleMap<String, u64>,
     }
@@ -73,7 +74,7 @@ module mint_nft::elevtrix_nft {
         max_count: u64,
         allow_mint_count: u64,
         mint_type: u64,
-        nonce: String,
+        nonce: u64,
     }
 
 
@@ -88,6 +89,14 @@ module mint_nft::elevtrix_nft {
     /// Specified proof of knowledge required to prove ownership of a public key is invalid
     const EINVALID_PROOF_OF_KNOWLEDGE: u64 = 4;
     const E_PUBLIC_KEY_NOT_SIGNER : u64 = 5;
+    // Exceed maximum quantity 
+    const EMAX_COUNT: u64 = 6;
+    // Exceeds the maximum number of the current type
+    const EALLOW_MINT_COUNT: u64 = 7;
+    // The Nonce is already used
+    const NONCE_USED: u64 = 8;
+
+
 
     /// `init_module` is automatically called when publishing the module.
     /// In this function, we create an example NFT collection and an example token.
@@ -104,6 +113,7 @@ module mint_nft::elevtrix_nft {
             signer_cap: resource_signer_cap,
             collections: simple_map::create<String, CollectionInfo>(),
             base_uri: string::utf8(b"https://creator.dev.catgpt.chat/v1/token/"),
+            nonce: vector::empty<u64>(),
         });
     }
 
@@ -141,17 +151,31 @@ module mint_nft::elevtrix_nft {
         );        
     }
 
-    public entry fun mint(receiver: &signer,collection_name: String,amount: u64,price: u64,max_count:u64,allow_mint_count:u64,mint_type:u64,nonce:String,_signature: vector<u8>) acquires ConfigData {
+    public entry fun mint(receiver: &signer,collection_name: String,amount: u64,price: u64,max_count:u64,allow_mint_count:u64,mint_type:u64,nonce:u64,signature: vector<u8>) acquires ConfigData,MintData {
+        let receiver_addr = signer::address_of(receiver);
         let config_data = borrow_global_mut<ConfigData>(@mint_nft);
-
-        // verify_of_mint(signer::address_of(receiver), collection_name, price, amount, max_count, allow_mint_count, mint_type, nonce, _signature, config_data.public_key);
-
+        assert!(
+            vector::contains<u64>(&config_data.nonce,&nonce),
+            error::invalid_argument(NONCE_USED)
+        );
+        verify_of_mint(receiver_addr, collection_name, price, amount, max_count, allow_mint_count, mint_type, nonce, signature, config_data.public_key);
+        if (!exists<MintData>(receiver_addr)) move_to(receiver, MintData{
+                whileMinted: simple_map::create<String, u64>(),
+                minted: simple_map::create<String, u64>(),
+            });
+            
         let collection_info = simple_map::borrow(&mut config_data.collections, &collection_name);
-        // exists!(token_data_id, error::from_code(1));
-        let resource_signer = account::create_signer_with_capability(&config_data.signer_cap);
+        let mint_data = borrow_global_mut<MintData>(receiver_addr);
+        let while_minted =* simple_map::borrow(&mut mint_data.whileMinted, &collection_name);
+        let minted = * simple_map::borrow(&mut mint_data.minted, &collection_name);
         let mint_position = collection_info.last_mint;
+        assert!(mint_position+amount > max_count,  error::invalid_argument(EMAX_COUNT));
+        if ( mint_type == 2) assert!(while_minted + amount > allow_mint_count, error::invalid_argument(EALLOW_MINT_COUNT))
+        else assert!(minted + amount > allow_mint_count, error::invalid_argument(EALLOW_MINT_COUNT));
+
+        let resource_signer = account::create_signer_with_capability(&config_data.signer_cap);
         // Mint token to the receiver.
-        let total_amount = price * amount * 10000000;
+        let total_amount = price * amount;
         coin::transfer<AptosCoin>(receiver,collection_info.royalty_payee_address , total_amount); 
         let mint_amout = amount;
         while (amount > 0) {
@@ -197,22 +221,26 @@ module mint_nft::elevtrix_nft {
                 }
             );
         };
-          event::emit(
+        event::emit(
             Minted{
                 receiver: signer::address_of(receiver),
                 amount: mint_amout,
                 mint_type: mint_type,
-                collection_name: collection_name,
+                collection_name: collection_info.collection_name,
                 start_token_id: collection_info.last_mint + 1,
             }
         );
+        vector::push_back(&mut config_data.nonce, nonce);
 
         simple_map::upsert<String,CollectionInfo>(&mut config_data.collections, collection_info.collection_name,CollectionInfo{
             collection_name: collection_info.collection_name,
             base_uri:  collection_info.base_uri,
             royalty_payee_address:collection_info.royalty_payee_address,
             last_mint: mint_position,
-        } );
+        });
+        if ( mint_type == 2)  simple_map::upsert<String,u64> (&mut mint_data.whileMinted, collection_name,  while_minted + mint_amout)
+        else  simple_map::upsert<String,u64> (&mut mint_data.minted, collection_name,  minted + mint_amout);
+       
     }
     fun num2str(num: u64): String
         {
@@ -241,32 +269,6 @@ module mint_nft::elevtrix_nft {
         let module_data = borrow_global_mut<ConfigData>(@mint_nft);
         module_data.base_uri = url;
     }
-
-     entry fun testclaim(
-        receiver: &signer,
-        collection_name: String,
-        sender_public_key_bytes: vector<u8>,
-        signature_bytes: vector<u8>
-    )  {
-        let receiver_address = signer::address_of(receiver);
-        // Verify that the public key bytes, match the onchcain authentication key
-        let public_key = ed25519::new_unvalidated_public_key_from_bytes(sender_public_key_bytes);
-        // let authentication_key = ed25519::unvalidated_public_key_to_authentication_key(&public_key);
-        // let sender_auth_key = account::get_authentication_key(sender);
-        // assert!(sender_auth_key == authentication_key, error::unauthenticated(E_PUBLIC_KEY_NOT_SIGNER));
-
-        // Verify signature
-       let deploy_challenge = DeployChallenge {
-            collection_name: collection_name,
-            receiver: receiver_address,
-        };
-        let signature = ed25519::new_signature_from_bytes(signature_bytes);
-        assert!(
-            ed25519::signature_verify_strict_t(&signature, &public_key, deploy_challenge),
-            std::error::invalid_argument(EINVALID_PROOF_OF_KNOWLEDGE)
-        );
-    }
-
 
     /// Verify that the collection token minter intends to mint the given token_data_id to the receiver
     fun verify_of_deploy(
@@ -298,10 +300,13 @@ module mint_nft::elevtrix_nft {
         max_count: u64,
         allow_mint_count: u64,
         mint_type: u64,
-        nonce: String,
+        nonce: u64,
         mint_signature: vector<u8>,
         public_key: ValidatedPublicKey
     ) {
+
+     
+
         let mint_proof_challenge = MintProofChallenge {
             receiver: receiver_addr,
             collection_name: collection_name,
@@ -318,9 +323,6 @@ module mint_nft::elevtrix_nft {
             ed25519::signature_verify_strict_t(&signature, &unvalidated_public_key, mint_proof_challenge),
             error::invalid_argument(EINVALID_PROOF_OF_KNOWLEDGE)
         );
-    }
-
-    ){
 
     }
 

@@ -160,7 +160,7 @@ module mint_nft::elevtrix_nft {
         //     vector::contains<u64>(&config_data.nonce,&nonce),
         //     error::invalid_argument(NONCE_USED)
         // );
-        // verify_of_mint(receiver_addr, collection_name, price, amount, max_count, allow_mint_count, mint_type, nonce, signature, config_data.public_key);
+        verify_of_mint(receiver_addr, collection_name, price, amount, max_count, allow_mint_count, mint_type, nonce, signature, config_data.public_key);
         // if (!exists<MintData>(receiver_addr)) {
         //     move_to(receiver, MintData{
         //         while_minted: simple_map::create<String, u64>(),

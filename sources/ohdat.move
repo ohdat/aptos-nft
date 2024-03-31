@@ -44,7 +44,7 @@ module mint_nft::elevtrix_nft {
         collections:SimpleMap<String,CollectionInfo>,
         public_key: ed25519::ValidatedPublicKey,
         base_uri: String,
-        nonce : vector<u64>,
+        nonces : vector<u64>,
     } 
     struct CollectionInfo has drop,store {
         collection_name: String,
@@ -94,7 +94,7 @@ module mint_nft::elevtrix_nft {
     // Exceeds the maximum number of the current type
     const EALLOW_MINT_COUNT: u64 = 7;
     // The Nonce is already used
-    const NONCE_USED: u64 = 8;
+    const ENONCE_USED: u64 = 8;
 
 
 
@@ -113,7 +113,7 @@ module mint_nft::elevtrix_nft {
             signer_cap: resource_signer_cap,
             collections: simple_map::create<String, CollectionInfo>(),
             base_uri: string::utf8(b"https://creator.dev.catgpt.chat/v1/token/"),
-            nonce: vector::empty<u64>(),
+            nonces: vector::empty<u64>(),
         });
     }
 
@@ -151,32 +151,39 @@ module mint_nft::elevtrix_nft {
         );        
     }
 
-    public entry fun mint(receiver: &signer,collection_name: String,amount: u64,price: u64,max_count:u64,allow_mint_count:u64,mint_type:u64,nonce:u64,signature: vector<u8>) acquires ConfigData {
+    public entry fun mint(receiver: &signer,collection_name: String,amount: u64,price: u64,max_count:u64,allow_mint_count:u64,mint_type:u64,nonce:u64,signature: vector<u8>) acquires ConfigData, MintData {
         let receiver_addr = signer::address_of(receiver);
         let config_data = borrow_global_mut<ConfigData>(@mint_nft);
         let collection_info = simple_map::borrow(&mut config_data.collections, &collection_name);
         let mint_position = collection_info.last_mint;
-        // assert!(
-        //     vector::contains<u64>(&config_data.nonce,&nonce),
-        //     error::invalid_argument(NONCE_USED)
-        // );
+        assert!(
+            !vector::contains(&config_data.nonces,&nonce),
+            error::invalid_argument(ENONCE_USED)
+        );
         verify_of_mint(receiver_addr, collection_name, price, amount, max_count, allow_mint_count, mint_type, nonce, signature, config_data.public_key);
-        // if (!exists<MintData>(receiver_addr)) {
-        //     move_to(receiver, MintData{
-        //         while_minted: simple_map::create<String, u64>(),
-        //         minted: simple_map::create<String, u64>(),
-        //     })
-        // };
-        // let mint_data = borrow_global_mut<MintData>(receiver_addr);
-        // let while_minted =* simple_map::borrow(&mut mint_data.while_minted, &collection_name);
-        // let minted = * simple_map::borrow(&mut mint_data.minted, &collection_name);
-        // assert!(mint_position+amount > max_count,  error::invalid_argument(EMAX_COUNT));
-        // if ( mint_type == 2){
-        //     assert!(while_minted + amount > allow_mint_count, error::invalid_argument(EALLOW_MINT_COUNT))
-        // } else{
-        //     assert!(minted + amount > allow_mint_count, error::invalid_argument(EALLOW_MINT_COUNT))
-        // };
-
+        // test -- start
+        if (!exists<MintData>(receiver_addr)) {
+            move_to(receiver, MintData{
+                while_minted: simple_map::create<String, u64>(),
+                minted: simple_map::create<String, u64>(),
+            })
+        };
+        let mint_data = borrow_global_mut<MintData>(receiver_addr);
+        if (!simple_map::contains_key(&mut mint_data.while_minted, &collection_name)){
+            simple_map::add<String,u64>(&mut mint_data.while_minted, collection_name, 0)
+        };
+        if (!simple_map::contains_key(&mut mint_data.minted, &collection_name)) {
+            simple_map::add<String,u64>(&mut mint_data.minted, collection_name, 0)
+        };
+        let while_minted = * simple_map::borrow(&mut mint_data.while_minted, &collection_name);
+        let minted = * simple_map::borrow(&mut mint_data.minted, &collection_name);
+        assert!(max_count > mint_position + amount,  error::invalid_argument(EMAX_COUNT));
+        if ( mint_type == 2){
+            assert!(allow_mint_count > while_minted + amount   , error::invalid_argument(EALLOW_MINT_COUNT))
+        } else{
+            assert!(allow_mint_count> minted + amount  , error::invalid_argument(EALLOW_MINT_COUNT))
+        };
+        //  test -- end
         let resource_signer = account::create_signer_with_capability(&config_data.signer_cap);
         // Mint token to the receiver.
         let total_amount = price * amount;
@@ -234,18 +241,18 @@ module mint_nft::elevtrix_nft {
                 start_token_id: collection_info.last_mint + 1,
             }
         );
-        // vector::push_back(&mut config_data.nonce, nonce);
+        vector::push_back(&mut config_data.nonces, nonce);
         simple_map::upsert<String,CollectionInfo>(&mut config_data.collections, collection_info.collection_name,CollectionInfo{
             collection_name: collection_info.collection_name,
             base_uri:  collection_info.base_uri,
             royalty_payee_address:collection_info.royalty_payee_address,
             last_mint: mint_position,
         });
-        // if ( mint_type == 2 ){
-        //     simple_map::upsert<String,u64> (&mut mint_data.while_minted, collection_name,  minted + mint_amout)
-        // } else{
-        //     simple_map::upsert<String,u64> (&mut mint_data.minted, collection_name,  minted + mint_amout)
-        // };
+        if ( mint_type == 2 ){
+            simple_map::upsert<String,u64> (&mut mint_data.while_minted, collection_name,  minted + mint_amout)
+        } else{
+            simple_map::upsert<String,u64> (&mut mint_data.minted, collection_name,  minted + mint_amout)
+        };
     }
     fun num2str(num: u64): String
         {
